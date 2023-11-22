@@ -1,5 +1,9 @@
 import os
+import sys
 import json
+from PyQt5.QtWidgets import QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QPushButton, QWidget, QListWidget, QTextEdit, QInputDialog
+
+
 
 class Notebook:
     def __init__(self, name):
@@ -45,78 +49,118 @@ class Notebook:
             except FileNotFoundError:
                 return Notebook(name)
 
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
+class NotebookGUI(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.notebooks = {}
+        self.current_notebook = None
+        self.current_note = None
+        self.initUI()
+        
+    def initUI(self):
+        self.setWindowTitle('Notebook GUI')
+
+        # Main horizontal layout
+        main_layout = QHBoxLayout()
+
+        # Layout for notebooks and notebook buttons
+        notebook_layout = QVBoxLayout()
+        self.notebook_list = QListWidget()
+        notebook_layout.addWidget(self.notebook_list)
+
+        # Buttons for notebooks
+        self.add_notebook_btn = QPushButton('Add Notebook')
+        self.remove_notebook_btn = QPushButton('Remove Notebook')
+        self.edit_notebook_btn = QPushButton('Edit Notebook Title')
+        notebook_layout.addWidget(self.add_notebook_btn)
+        notebook_layout.addWidget(self.remove_notebook_btn)
+        notebook_layout.addWidget(self.edit_notebook_btn)
+        main_layout.addLayout(notebook_layout)
+
+        self.add_notebook_btn.clicked.connect(self.add_notebook)
+        self.notebook_list.itemClicked.connect(self.on_notebook_selected)
+
+        # Layout for notes and note buttons
+        note_layout = QVBoxLayout()
+        self.note_list = QListWidget()
+        note_layout.addWidget(self.note_list)
+
+        # Buttons for notes
+        self.add_note_btn = QPushButton('Add Note')
+        self.remove_note_btn = QPushButton('Remove Note')
+        self.edit_note_btn = QPushButton('Edit Note Title')
+        note_layout.addWidget(self.add_note_btn)
+        note_layout.addWidget(self.remove_note_btn)
+        note_layout.addWidget(self.edit_note_btn)
+        main_layout.addLayout(note_layout)
+
+        self.add_note_btn.clicked.connect(self.add_note)
+
+        # Note body text editor
+        body_layout = QVBoxLayout()
+        self.note_body = QTextEdit()
+        body_layout.addWidget(self.note_body)
+        self.save_note_btn = QPushButton("save")
+        body_layout.addWidget(self.save_note_btn)
+        main_layout.addLayout(body_layout)
+
+        self.save_note_btn.clicked.connect(self.save_note)
+        self.note_list.itemClicked.connect(self.on_note_selected)
+
+        # Central widget
+        central_widget = QWidget()
+        central_widget.setLayout(main_layout)
+        self.setCentralWidget(central_widget)
+
+        # Set the window size
+        self.setGeometry(100, 100, 900, 600)
+
+    def add_notebook(self):
+        name, ok = QInputDialog.getText(self, 'Add Notebook', 'Enter notebook name:')
+        if ok and name:
+            notebook = Notebook(name)
+            self.notebook_list.addItem(name)
+            # If you have a list or dict to keep track of notebooks
+            self.notebooks[name] = notebook
+            # Save the notebook list if required
+            notebook.save_to_file()
+
+    def on_notebook_selected(self, item):
+        notebook_name = item.text()
+        notebook = self.notebooks.get(notebook_name)
+        if notebook:
+            self.note_body.clear()
+            self.note_list.clear()  # Clear the list before adding new items
+            for title in notebook.list_notes():
+                self.note_list.addItem(title)
+            self.current_notebook = notebook
+
+    def add_note(self):
+        name, ok = QInputDialog.getText(self, 'Add Note', 'Enter note name:')
+        if ok and name and self.current_notebook:
+            self.note_list.addItem(name)
+            self.current_notebook.create_note(name,"")
+
+    def on_note_selected(self, item):
+        note = item.text()
+        if note:
+            self.note_body.clear()
+            self.note_body.setText(self.current_notebook.find_note(note))
+            self.current_note = note
+
+    def save_note(self):
+        print("save button clicked")
+        if self.current_notebook and self.current_note:
+            self.current_notebook.edit_note(self.current_note, self.note_body.toPlainText())
+            print(f"saved current note {self.current_note}")
+
+
 
 def main():
-    notes_dir = "notes"
-    if not os.path.exists(notes_dir):
-        os.makedirs(notes_dir)
+    app = QApplication(sys.argv)
+    ex = NotebookGUI()
+    ex.show()
+    sys.exit(app.exec_())
 
-    notebooks = {}
-    # Load existing notebooks
-    for file in os.listdir(notes_dir):
-        if file.endswith(".json"):
-            name = file.replace(".json", "")
-            notebooks[name] = Notebook.load_from_file(os.path.join(notes_dir, name))
-
-    while True:
-        clear_screen()
-        if not notebooks:
-            print("No notebooks found. Please create a new notebook.")
-            name = input("Enter notebook name: ")
-            notebooks[name] = Notebook(name)
-            continue
-
-        print("Select a notebook (enter 0 to create a new one):")
-        for i, name in enumerate(notebooks, start=1):
-            print(f"{i}) {name}")
-
-        choice = input("Enter choice: ")
-        if choice == '0':
-            name = input("Enter notebook name: ")
-            notebooks[name] = Notebook(name)
-            notebooks[name].save_to_file()
-            continue
-        elif choice.isdigit() and 1 <= int(choice) <= len(notebooks):
-            notebook = notebooks[list(notebooks)[int(choice) - 1]]
-            while True:
-                clear_screen()
-                print(f"Notebook: {notebook.name}\n")
-                print("Select a note (enter 0 to go back):")
-                for i, title in enumerate(notebook.list_notes(), start=1):
-                    print(f"{i}) {title}")
-                print("N) Create new note")
-
-                note_choice = input("Enter choice: ")
-                if note_choice == '0':
-                    notebook.save_to_file()
-                    break
-                elif note_choice.upper() == 'N':
-                    title = input("Enter note title: ")
-                    body = input("Enter note body:\n")
-                    notebook.create_note(title, body)
-                elif note_choice.isdigit() and 1 <= int(note_choice) <= len(notebook.notes):
-                    note_title = notebook.list_notes()[int(note_choice) - 1]
-                    note_body = notebook.find_note(note_title)
-                    while True:
-                        clear_screen()
-                        print(f"Title: {note_title}\nBody:\n{note_body}\n")
-                        print("1) Edit\n2) Rename\n3) Delete\n0) Back")
-                        edit_choice = input("Enter choice: ")
-                        if edit_choice == '0':
-                            break
-                        elif edit_choice == '1':
-                            new_body = input("Enter new body:\n")
-                            notebook.edit_note(note_title, new_body)
-                            note_body = new_body
-                        elif edit_choice == '2':
-                            new_title = input("Enter new title: ")
-                            notebook.rename_note(note_title, new_title)
-                            note_title = new_title
-                        elif edit_choice == '3':
-                            notebook.delete_note(note_title)
-                            break
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
